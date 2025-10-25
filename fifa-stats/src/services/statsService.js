@@ -7,9 +7,23 @@ export const getDetailedCareerStats = async () => {
     const { data: allStats, error } = await supabase
       .from('player_stats')
       .select(`
-        *,
+        goals,
+        assists,
+        rating,
+        minutes_played,
+        yellow_cards,
+        red_cards,
+        team_id,
+        player_team:teams!player_stats_team_id_fkey(is_national_team),
         matches!inner(
-          *,
+          id,
+          season_id,
+          date,
+          home_team_id,
+          away_team_id,
+          home_score,
+          away_score,
+          is_home_match,
           home_team:teams!matches_home_team_id_fkey(name),
           away_team:teams!matches_away_team_id_fkey(name),
           competition:competitions(name, type),
@@ -45,8 +59,8 @@ const calculateDetailedStats = (statsData) => {
   const matchResults = calculateMatchResults(statsData);
 
   // Separar por club vs selección
-  const clubMatches = statsData.filter(stat => !stat.matches.is_national_team);
-  const nationalMatches = statsData.filter(stat => stat.matches.is_national_team);
+  const clubMatches = statsData.filter(stat => !stat.player_team?.is_national_team);
+  const nationalMatches = statsData.filter(stat => stat.player_team?.is_national_team);
 
   const clubStats = calculateBasicStats(clubMatches);
   const nationalStats = calculateBasicStats(nationalMatches);
@@ -55,7 +69,7 @@ const calculateDetailedStats = (statsData) => {
   const opponentGoals = {};
   statsData.forEach(stat => {
     const match = stat.matches;
-    const opponent = match.is_home ? match.away_team?.name : match.home_team?.name;
+    const opponent = match.is_home_match ? match.away_team?.name : match.home_team?.name;
     if (opponent && stat.goals > 0) {
       opponentGoals[opponent] = (opponentGoals[opponent] || 0) + stat.goals;
     }
@@ -104,12 +118,12 @@ const calculateDetailedStats = (statsData) => {
     .slice(0, 5)
     .map(stat => ({
       date: stat.matches.date,
-      opponent: stat.matches.is_home ? stat.matches.away_team?.name : stat.matches.home_team?.name,
+      opponent: stat.matches.is_home_match ? stat.matches.away_team?.name : stat.matches.home_team?.name,
       competition: stat.matches.competition?.name,
       rating: stat.rating,
       goals: stat.goals,
       assists: stat.assists,
-      result: stat.matches.result
+      result: `${stat.matches.home_score}-${stat.matches.away_score}`
     }));
 
   // Estadísticas por temporada
@@ -137,33 +151,20 @@ const calculateDetailedStats = (statsData) => {
     seasonStats[key].assists += stat.assists || 0;
     seasonStats[key].rating += stat.rating || 0;
     seasonStats[key].minutes += stat.minutes_played || 0;
+  });
+
+  // Calcular resultados por temporada
+  Object.keys(seasonStats).forEach(key => {
+    const seasonData = statsData.filter(stat => {
+      const seasonName = stat.matches.season?.name || 'Sin especificar';
+      const clubName = stat.matches.season?.club?.name || 'Sin club';
+      return `${seasonName} (${clubName})` === key;
+    });
     
-    // Calcular resultado del partido para esta temporada
-    const match = stat.matches;
-    const result = match.result;
-    
-    if (result) {
-      const scores = result.split('-').map(score => parseInt(score.trim()));
-      if (scores.length === 2) {
-        const [homeScore, awayScore] = scores;
-        
-        if (homeScore === awayScore) {
-          seasonStats[key].draws++;
-        } else if (match.is_home) {
-          if (homeScore > awayScore) {
-            seasonStats[key].wins++;
-          } else {
-            seasonStats[key].losses++;
-          }
-        } else {
-          if (awayScore > homeScore) {
-            seasonStats[key].wins++;
-          } else {
-            seasonStats[key].losses++;
-          }
-        }
-      }
-    }
+    const seasonResults = calculateMatchResults(seasonData).general;
+    seasonStats[key].wins = seasonResults.wins;
+    seasonStats[key].draws = seasonResults.draws;
+    seasonStats[key].losses = seasonResults.losses;
   });
 
   Object.keys(seasonStats).forEach(season => {
@@ -209,31 +210,24 @@ const calculateMatchResults = (statsData) => {
   const calculateResults = (matches) => {
     let wins = 0, draws = 0, losses = 0;
     
-    matches.forEach(stat => {
+    matches.forEach((stat) => {
       const match = stat.matches;
-      const result = match.result;
+      const homeScore = match.home_score;
+      const awayScore = match.away_score;
       
-      if (!result) return;
-      
-      // Parsear el resultado (formato "2-1", "1-1", etc.)
-      const scores = result.split('-').map(score => parseInt(score.trim()));
-      if (scores.length !== 2) return;
-      
-      const [homeScore, awayScore] = scores;
-      
-      // Determinar si ganó, empató o perdió desde la perspectiva del jugador
-      let playerWon = false;
-      let isDraw = false;
-      
-      if (homeScore === awayScore) {
-        isDraw = true;
-      } else if (match.is_home) {
-        // Si jugó de local
-        playerWon = homeScore > awayScore;
-      } else {
-        // Si jugó de visitante
-        playerWon = awayScore > homeScore;
+      if (homeScore === undefined || awayScore === undefined) {
+        return;
       }
+      
+      const playerIsHome = stat.team_id 
+        ? stat.team_id === match.home_team_id 
+        : match.is_home_match;
+
+      const isDraw = homeScore === awayScore;
+      const playerWon = !isDraw && (
+        (playerIsHome && homeScore > awayScore) ||
+        (!playerIsHome && awayScore > homeScore)
+      );
       
       if (isDraw) {
         draws++;
@@ -248,8 +242,8 @@ const calculateMatchResults = (statsData) => {
   };
   
   const generalResults = calculateResults(statsData);
-  const clubResults = calculateResults(statsData.filter(stat => !stat.matches.is_national_team));
-  const nationalResults = calculateResults(statsData.filter(stat => stat.matches.is_national_team));
+  const clubResults = calculateResults(statsData.filter(stat => !stat.player_team?.is_national_team));
+  const nationalResults = calculateResults(statsData.filter(stat => stat.player_team?.is_national_team));
   
   return {
     general: generalResults,

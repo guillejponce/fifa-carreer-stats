@@ -29,12 +29,17 @@ export const createSeason = async (seasonData) => {
     const { data, error } = await supabase
       .from('seasons')
       .insert([
-        { 
-          name: seasonData.name, 
-          club_id: seasonData.club_id,
-          start_year: seasonData.start_year,
-          end_year: seasonData.end_year
-        }
+        (() => {
+          const newSeason = {
+            name: seasonData.name,
+            start_year: seasonData.start_year,
+            end_year: seasonData.end_year
+          };
+          if (seasonData.club_id) {
+            newSeason.club_id = seasonData.club_id;
+          }
+          return newSeason;
+        })()
       ])
       .select(`
         *,

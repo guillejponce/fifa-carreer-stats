@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Calendar, Target, Trophy, TrendingUp, Shield, Star, CheckCircle, XCircle, Minus } from 'lucide-react';
+import { Plus, Calendar, Trophy, Shield, CheckCircle, XCircle, Minus } from 'lucide-react';
 import { getSeasons, createSeason } from '../services/seasonsService';
 import { getTeams, createTeam } from '../services/teamsService';
 import { getDetailedCareerStats } from '../services/statsService';
@@ -117,7 +117,7 @@ const Dashboard = () => {
   const availableClubs = teams.filter(team => !team.is_national_team);
 
   return (
-    <div className="dashboard">
+    <div className="dashboard page-wrapper">
       <div className="dashboard-header">
         <h1>Dashboard - Modo Carrera FIFA</h1>
         <p>Resumen completo de tu carrera profesional</p>
@@ -141,12 +141,7 @@ const Dashboard = () => {
 
       {/* Grid de estadísticas adicionales */}
       {detailedStats && (
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', 
-          gap: '1.5rem', 
-          marginBottom: '2rem' 
-        }}>
+        <div className="grid gap-6 mb-8 sm:grid-cols-2 lg:grid-cols-3">
           <TopOpponents opponents={detailedStats.topOpponents} />
           <BestMatches matches={detailedStats.bestMatches} />
         </div>
@@ -332,11 +327,11 @@ const Dashboard = () => {
             </button>
           </div>
         ) : (
-          <div className="seasons-grid">
+          <div className="seasons-grid grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {seasons.map((season) => {
-              const seasonStats = detailedStats?.seasonStats?.find(s => 
-                s.name.includes(season.name)
-              ) || { 
+              const clubName = season.club?.name || 'Sin club';
+              const key = `${season.name} (${clubName})`;
+              const seasonStats = detailedStats?.seasonStats?.find(s => s.name === key) || { 
                 matches: 0, 
                 goals: 0, 
                 assists: 0, 

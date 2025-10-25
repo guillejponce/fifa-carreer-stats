@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Plus, BarChart2, Calendar, Shield, Trophy as TrophyIcon, ArrowLeft, AlertCircle, UserX, Trash2, Star } from 'lucide-react';
 import { getSeasonById } from '../services/seasonsService';
@@ -22,11 +22,7 @@ const SeasonDetail = () => {
   const [teams, setTeams] = useState([]);
   const [competitions, setCompetitions] = useState([]);
 
-  useEffect(() => {
-    loadSeasonData();
-  }, [seasonId]);
-
-  const loadSeasonData = async () => {
+  const loadSeasonData = useCallback(async () => {
     try {
       setLoading(true);
       const [
@@ -63,7 +59,11 @@ const SeasonDetail = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [seasonId]);
+
+  useEffect(() => {
+    loadSeasonData();
+  }, [seasonId, loadSeasonData]);
 
   const handleMatchCreated = () => {
     setShowMatchForm(false);
@@ -96,7 +96,7 @@ const SeasonDetail = () => {
   }
 
   return (
-    <div className="season-detail-container">
+    <div className="season-detail-container page-wrapper">
       <Link to="/" className="back-link">
         <ArrowLeft size={18} /> Volver al Dashboard
       </Link>
@@ -123,7 +123,7 @@ const SeasonDetail = () => {
         </div>
       </header>
 
-      <div className="actions-bar">
+      <div className="actions-bar flex gap-3 my-4 flex-wrap md:flex-nowrap sticky bottom-4 md:static z-20">
         <button className="btn btn-primary" onClick={() => setShowMatchForm(true)}>
           <Plus size={18} /> Añadir Partido
         </button>
@@ -188,17 +188,24 @@ const calculateSeasonStats = (matches) => {
     acc.minutes += ps.minutes_played || 0;
     acc.ratingSum += ps.rating || 0;
 
-    // Calcular resultado W/D/L
-    const result = match.result;
-    if (result) {
-      const [homeScore, awayScore] = result.split('-').map((s) => parseInt(s.trim(), 10));
-      if (!isNaN(homeScore) && !isNaN(awayScore)) {
-        if (homeScore === awayScore) {
-          acc.draws += 1;
+    const homeScore = match.home_score;
+    const awayScore = match.away_score;
+
+    if (typeof homeScore === 'number' && typeof awayScore === 'number') {
+      const playerIsHome = ps.team_id
+        ? ps.team_id === match.home_team_id
+        : match.is_home_match;
+
+      if (homeScore === awayScore) {
+        acc.draws += 1;
+      } else {
+        const playerWon =
+          (playerIsHome && homeScore > awayScore) ||
+          (!playerIsHome && awayScore > homeScore);
+        if (playerWon) {
+          acc.wins += 1;
         } else {
-          const playerHome = match.is_home_match; // assuming field name
-          const playerWon = playerHome ? homeScore > awayScore : awayScore > homeScore;
-          if (playerWon) acc.wins += 1; else acc.losses += 1;
+          acc.losses += 1;
         }
       }
     }
@@ -267,7 +274,7 @@ const MatchForm = ({ seasonId, onMatchCreated, onCancel, teams, competitions, cu
         is_home_match: formData.is_home_match,
         home_score: parseInt(formData.home_score),
         away_score: parseInt(formData.away_score),
-        team_id: currentTeamId,  // <-- club asociado
+        player_team_id: currentTeamId,
       };
       
       const playerStats = {
@@ -613,7 +620,7 @@ const MatchesList = ({ matches }) => {
                       )}
                     </div>
                   </td>
-                  <td>{match.result}</td>
+                  <td>{`${match.home_score} - ${match.away_score}`}</td>
                   <td>
                     <span style={{ color: (playerStats.goals || 0) > 0 ? '#28a745' : '#b8c5d1' }}>
                       {playerStats.goals || 0}
@@ -669,62 +676,46 @@ const TrophiesList = ({ trophies, onTrophyDeleted }) => {
       </div>
       <div className="trophies-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
         {trophies.map((trophy) => (
-          <div key={trophy.id} className="trophy-card" style={{
-            border: '1px solid #e1e8ed',
-            borderRadius: '8px',
-            padding: '1rem',
-            backgroundColor: trophy.is_individual ? '#fff8e1' : '#f0f8ff',
-            position: 'relative'
-          }}>
+          <div
+            key={trophy.id}
+            className={`relative border rounded-lg p-4 ${
+              trophy.is_individual ? 'bg-yellow-100/80 border-yellow-300' : 'bg-cyan-50/80 border-cyan-200'
+            }`}
+          >
             <button
               onClick={() => onTrophyDeleted(trophy.id)}
-              style={{
-                position: 'absolute',
-                top: '0.5rem',
-                right: '0.5rem',
-                background: 'none',
-                border: 'none',
-                color: '#dc3545',
-                cursor: 'pointer',
-                padding: '0.25rem'
-              }}
+              className="absolute top-2 right-2 text-red-600 hover:text-red-700 p-1"
               title="Eliminar trofeo"
             >
               <Trash2 size={16} />
             </button>
             
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.75rem' }}>
+            <div className="flex items-center mb-3 gap-2">
               {trophy.is_individual ? (
                 <Star size={24} style={{ color: '#ffc107', marginRight: '0.5rem' }} />
               ) : (
                 <TrophyIcon size={24} style={{ color: '#00a8cc', marginRight: '0.5rem' }} />
               )}
-              <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#1a202c' }}>
+              <h3 className="m-0 text-lg font-semibold text-gray-800">
                 {trophy.name}
               </h3>
             </div>
             
             {!trophy.is_individual && trophy.competition && (
-              <p style={{ margin: '0.25rem 0', color: '#4a5568', fontSize: '0.9rem' }}>
+              <p className="my-1 text-sm text-gray-600">
                 <strong>Competición:</strong> {trophy.competition.name}
                 {trophy.competition.nation?.name && ` (${trophy.competition.nation.name})`}
               </p>
             )}
             
             {!trophy.is_individual && trophy.team && (
-              <p style={{ margin: '0.25rem 0', color: '#4a5568', fontSize: '0.9rem' }}>
+              <p className="my-1 text-sm text-gray-600">
                 <strong>Equipo:</strong> {trophy.team.name}
                 {trophy.team.nation?.name && ` (${trophy.team.nation.name})`}
               </p>
             )}
             
-            <div style={{ 
-              marginTop: '0.75rem', 
-              paddingTop: '0.75rem', 
-              borderTop: '1px solid #e2e8f0',
-              fontSize: '0.8rem',
-              color: '#718096'
-            }}>
+            <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-500">
               {trophy.is_individual ? 'Premio Individual' : 'Trofeo de Equipo'}
             </div>
           </div>

@@ -4,23 +4,24 @@ import { Trophy, BarChart, Settings } from 'lucide-react';
 
 const Navbar = () => {
   return (
-    <nav className="navbar">
-      <div className="navbar-content">
-        <div className="navbar-brand">
-          <Trophy size={32} />
-          <span>FIFA Career Stats</span>
-        </div>
-        <ul className="navbar-nav">
+    <nav className="w-full bg-gray-900 text-white sticky top-0 z-30 shadow">
+      <div className="page-wrapper flex items-center justify-between h-14">
+        <Link to="/" className="flex items-center gap-2 font-semibold text-lg">
+          <Trophy size={24} className="text-yellow-400" />
+          <span className="hidden sm:block">FIFA Career Stats</span>
+        </Link>
+
+        <ul className="flex items-center gap-4 text-sm">
           <li>
-            <Link to="/">
+            <Link to="/" className="flex items-center gap-1 hover:text-cyan-400">
               <BarChart size={18} />
-              Dashboard
+              <span className="hidden sm:inline">Dashboard</span>
             </Link>
           </li>
           <li>
-            <Link to="/admin">
+            <Link to="/admin" className="flex items-center gap-1 hover:text-cyan-400">
               <Settings size={18} />
-              Admin
+              <span className="hidden sm:inline">Admin</span>
             </Link>
           </li>
         </ul>
